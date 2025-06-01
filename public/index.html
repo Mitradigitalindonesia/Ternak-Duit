@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Windice Bot - Climber & Sniper</title>
   <style>
     body {
@@ -19,7 +19,7 @@
       background: white;
       padding: 2rem;
       border-radius: 12px;
-      box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
       max-width: 400px;
       width: 100%;
     }
@@ -27,7 +27,9 @@
       text-align: center;
       margin-bottom: 1.5rem;
     }
-    label, select, input {
+    label,
+    select,
+    input {
       display: block;
       width: 100%;
       margin-bottom: 1rem;
@@ -78,6 +80,7 @@
   </div>
 
   <script>
+    const API_BASE = 'https://windice-bot.onrender.com';
     const startBtn = document.getElementById('startBtn');
     const apiKeyInput = document.getElementById('apiKey');
     const coinSelect = document.getElementById('coin');
@@ -89,45 +92,49 @@
     let running = false;
     let peakProfit = 0;
     let currentProfit = 0;
-    let phase = 1;
     let sniperUsed = false;
 
     async function fetchBalance(apiKey, coin) {
-  const res = await fetch('/api/user', {
-    headers: { 'Authorization': apiKey }
-  });
-  const json = await res.json();
-  console.log("Balance result:", json);
-  if (json && json.status === 'success' && json.data && json.data.balance && json.data.balance[coin] !== undefined) {
-    return json.data.balance[coin];
-  } else {
-    logEl.textContent = `Error fetching balance: ${json.message || 'Unknown'}`;
-    return 0;
-  }
-}
+      try {
+        const res = await fetch(`${API_BASE}/balance`, {
+          headers: { Authorization: apiKey },
+        });
+        const json = await res.json();
+        console.log("Balance result:", json);
+        return json?.data?.[coin] || 0;
+      } catch (err) {
+        console.error('Fetch balance error:', err);
+        return 0;
+      }
+    }
 
-async function roll(apiKey, coin, bet, low = 100, high = 7000) {
-  const res = await fetch('/api/roll', {
-    method: 'POST',
-    headers: {
-      'Authorization': apiKey,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      curr: coin,
-      bet: parseFloat(bet),
-      game: "in",
-      low: low,
-      high: high
-    })
-  });
-  const json = await res.json();
-  console.log("Roll result:", json);
-  return json;
-}
+    async function roll(apiKey, coin, bet, low = 100, high = 7000) {
+      try {
+        const res = await fetch(`${API_BASE}/roll`, {
+          method: 'POST',
+          headers: {
+            Authorization: apiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            curr: coin,
+            bet: parseFloat(bet),
+            game: 'in',
+            low: low,
+            high: high,
+          }),
+        });
+        const json = await res.json();
+        console.log("Roll result:", json);
+        return json;
+      } catch (err) {
+        console.error('Roll error:', err);
+        return null;
+      }
+    }
 
     function delay(ms) {
-      return new Promise(resolve => setTimeout(resolve, ms));
+      return new Promise((resolve) => setTimeout(resolve, ms));
     }
 
     async function startBot() {
@@ -146,10 +153,15 @@ async function roll(apiKey, coin, bet, low = 100, high = 7000) {
 
       while (running) {
         const balance = await fetchBalance(apiKey, coin);
-        balanceEl.textContent = balance.toFixed(8);
+        balanceEl.textContent = parseFloat(balance).toFixed(8);
 
         const result = await roll(apiKey, coin, currentBet);
-        const win = result.data.win;
+        if (!result || !result.data || typeof result.data.win === 'undefined') {
+          logEl.textContent = 'Error fetching roll result.';
+          break;
+        }
+
+        const win = parseFloat(result.data.win || 0);
         const profit = win - currentBet;
         currentProfit += profit;
         profitEl.textContent = currentProfit.toFixed(8);
@@ -173,7 +185,6 @@ async function roll(apiKey, coin, bet, low = 100, high = 7000) {
 
         if (currentProfit > peakProfit) {
           peakProfit = currentProfit;
-          phase = 1;
           sniperUsed = false;
         }
 
