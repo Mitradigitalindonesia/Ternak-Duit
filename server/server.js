@@ -7,23 +7,20 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Serve static files from public/
+// Serve frontend
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// Serve index.html
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
 const API_BASE = 'https://windice.io/api/v1/api';
 
-// Proxy GET /user (balance info)
+// GET Balance
 app.get('/api/user', async (req, res) => {
   try {
     const response = await fetch(`${API_BASE}/user`, {
-      headers: {
-        'Authorization': req.headers.authorization,
-      }
+      headers: { 'Authorization': req.headers.authorization }
     });
     const data = await response.json();
     res.json(data);
@@ -32,16 +29,16 @@ app.get('/api/user', async (req, res) => {
   }
 });
 
-// Proxy POST /roll (betting)
+// POST Roll
 app.post('/api/roll', async (req, res) => {
   try {
     const response = await fetch(`${API_BASE}/roll`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
         'Authorization': req.headers.authorization,
+        'Content-Type': 'application/json',
       },
-      body: JSON.stringify(req.body),
+      body: JSON.stringify(req.body)
     });
     const data = await response.json();
     res.json(data);
