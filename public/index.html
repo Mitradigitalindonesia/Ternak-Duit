@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Windice Bot - Climber & Sniper</title>
+  <title>Windice Auto Bot - Climber & Sniper</title>
   <style>
     body {
       margin: 0;
@@ -65,7 +65,7 @@
 </head>
 <body>
   <div class="bot-container">
-    <h2>Windice Auto Bot</h2>
+    <h2>Windice Auto Bot - Climber & Sniper</h2>
 
     <label for="apiKey">API Key</label>
     <input type="text" id="apiKey" placeholder="Enter your Windice API Key" />
@@ -74,9 +74,10 @@
     <select id="coin">
       <option value="trx">TRX</option>
       <option value="win">WIN</option>
+      <option value="doge" selected>DOGE</option>
     </select>
 
-    <label for="baseBet">Base Bet</label>
+    <label for="baseBet">Base Bet (e.g. 0.000001)</label>
     <input type="number" id="baseBet" value="0.000001" step="0.0000001" />
 
     <button id="startBtn">Start Bot</button>
@@ -87,11 +88,13 @@
       <p>Balance: <span id="balance">-</span></p>
       <p>Profit: <span id="profit">0</span></p>
       <p>Status: <span id="log">Idle</span></p>
+      <p>Sniper Mode: <span id="sniper">OFF</span></p>
     </div>
   </div>
 
   <script>
-    const API_BASE = '/api'; // backend proxy base
+    const API_BASE = '/api'; // backend proxy base URL
+
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
     const manualRollBtn = document.getElementById('manualRollBtn');
@@ -101,16 +104,23 @@
     const balanceEl = document.getElementById('balance');
     const profitEl = document.getElementById('profit');
     const logEl = document.getElementById('log');
+    const sniperEl = document.getElementById('sniper');
 
     let running = false;
     let currentProfit = 0;
     let peakProfit = 0;
     let sniperUsed = false;
+    let history = []; // array simpan "win" atau "lose"
+    let currentBet = 0;
+
+    function delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
 
     async function fetchBalance(apiKey, coin) {
       try {
         const res = await fetch(`${API_BASE}/user`, {
-          headers: { Authorization: apiKey }
+          headers: { Authorization: `Bearer ${apiKey}` }
         });
         const json = await res.json();
         return json?.user?.balance?.[coin] || 0;
@@ -120,31 +130,43 @@
       }
     }
 
-    async function roll(apiKey, coin, bet, low = 100, high = 7000) {
+    async function roll(apiKey, coin, bet, condition = 'under', chance = 49.5) {
+      const amount = Math.round(parseFloat(bet) * 1e8); // convert to satoshi
+
+      const body = {
+        amount,
+        chance,
+        condition,
+        currency: coin,
+        client_seed: `${Date.now()}-${Math.floor(Math.random() * 100000)}`
+      };
+
       try {
         const res = await fetch(`${API_BASE}/roll`, {
           method: 'POST',
           headers: {
-            Authorization: apiKey,
+            Authorization: `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0',
           },
-          body: JSON.stringify({
-            curr: coin,
-            bet: parseFloat(bet),
-            game: 'in',
-            low,
-            high,
-          }),
+          body: JSON.stringify(body),
         });
-        return await res.json();
+        const data = await res.json();
+        return data;
       } catch (err) {
         console.error('Roll error:', err);
         return null;
       }
     }
 
-    function delay(ms) {
-      return new Promise((resolve) => setTimeout(resolve, ms));
+    // Hitung streak lose beruntun dari history
+    function loseStreak(history) {
+      let count = 0;
+      for(let i = history.length - 1; i >= 0; i--) {
+        if(history[i] === 'lose') count++;
+        else break;
+      }
+      return count;
     }
 
     async function startBot() {
@@ -160,9 +182,12 @@
       startBtn.disabled = true;
       logEl.textContent = 'Running...';
 
-      let currentBet = baseBet;
-      let totalLoss = 0;
-      let sniperMode = false;
+      currentBet = baseBet;
+      currentProfit = 0;
+      peakProfit = 0;
+      sniperUsed = false;
+      history = [];
+      sniperEl.textContent = 'OFF';
 
       while (running) {
         const balance = await fetchBalance(apiKey, coin);
@@ -179,47 +204,76 @@
           break;
         }
 
-        const win = parseFloat(result.data.win || 0);
-        const profit = win - currentBet;
+        const winAmount = parseFloat(result.data.win || 0);
+        const profit = winAmount - currentBet;
         currentProfit += profit;
         profitEl.textContent = currentProfit.toFixed(8);
 
-        if (profit > 0) {
-          totalLoss = 0;
+        if(profit > 0) {
+          // Menang: reset bet & sniper
+          history.push('win');
+
+          // Reset sniper jika profit melewati peak
+          if(currentProfit > peakProfit) {
+            peakProfit = currentProfit;
+            sniperUsed = false;
+          }
+
           currentBet = baseBet;
-          sniperMode = false;
+          sniperEl.textContent = 'OFF';
+
         } else {
-          totalLoss += currentBet;
-          if (!sniperUsed && totalLoss >= baseBet * 5) {
-            currentBet = baseBet * 6;
-            sniperMode = true;
-            sniperUsed = true;
-            logEl.textContent = "Sniper Mode ON";
+          // Kalah: tambahkan lose ke history
+          history.push('lose');
+
+          // Cek trigger sniper:
+          // Sniper aktif jika ada minimal 2x lose beruntun sebelum menang terakhir, dan sniper belum dipakai
+          if(!sniperUsed && history.length >= 3) {
+            let last3 = history.slice(-3);
+            let loseCount = last3.filter(x => x === 'lose').length;
+            let lastIsWin = last3[2] === 'win';
+            let loseStreakCount = loseStreak(history.slice(0, history.length - 1));
+
+            // Sniper aktif kalau lose streak >=2 lalu menang 1x terakhir
+            if(loseStreakCount >= 2 && lastIsWin) {
+              sniperUsed = true;
+              sniperEl.textContent = 'ON';
+
+              // Hitung sniper bet: target kejar peak profit
+              let needProfit = peakProfit - currentProfit;
+              // Sniper payout antara 1.3 - 1.5
+              let sniperPayout = 1.4; // bisa diacak antara 1.3 - 1.5 kalau mau
+              currentBet = Math.max(baseBet, needProfit / (sniperPayout - 1));
+
+              logEl.textContent = `Sniper ON! Bet ${currentBet.toFixed(8)} @ payout ~${sniperPayout}`;
+              continue; // langsung roll sniper berikutnya
+            }
+          }
+
+          // Kalau sniper aktif, tapi kalah, reset sniper
+          if(sniperUsed) {
+            sniperUsed = false;
+            sniperEl.textContent = 'OFF';
+            currentBet = baseBet;
           } else {
+            // Kalah biasa: naik bet (martingale)
             currentBet *= 1.75;
           }
         }
 
-        if (currentProfit > peakProfit) {
-          peakProfit = currentProfit;
-          sniperUsed = false;
-        }
+        logEl.textContent = profit >= 0 ? `Menang +${profit.toFixed(8)}` : `Kalah ${profit.toFixed(8)}`;
 
-        await delay(1200);
+        // Delay antar roll
+        await delay(1500);
       }
 
       startBtn.disabled = false;
-      logEl.textContent = 'Bot Stopped.';
+      logEl.textContent = 'Bot stopped.';
+      sniperEl.textContent = 'OFF';
+      running = false;
     }
 
-    startBtn.addEventListener('click', () => {
-      if (!running) startBot();
-    });
-
-    stopBtn.addEventListener('click', () => {
-      running = false;
-    });
-
+    // Manual roll (hanya untuk testing manual)
     manualRollBtn.addEventListener('click', async () => {
       const apiKey = apiKeyInput.value.trim();
       const coin = coinSelect.value;
@@ -230,7 +284,7 @@
         return;
       }
 
-      logEl.textContent = 'Rolling...';
+      logEl.textContent = 'Rolling manual...';
 
       const balance = await fetchBalance(apiKey, coin);
       balanceEl.textContent = parseFloat(balance).toFixed(8);
@@ -241,11 +295,19 @@
         return;
       }
 
-      const win = parseFloat(result.data.win || 0);
-      const profit = win - baseBet;
+      const winAmount = parseFloat(result.data.win || 0);
+      const profit = winAmount - baseBet;
       currentProfit += profit;
       profitEl.textContent = currentProfit.toFixed(8);
       logEl.textContent = profit >= 0 ? `Menang +${profit.toFixed(8)}` : `Kalah ${profit.toFixed(8)}`;
+    });
+
+    startBtn.addEventListener('click', () => {
+      if (!running) startBot();
+    });
+
+    stopBtn.addEventListener('click', () => {
+      running = false;
     });
   </script>
 </body>
