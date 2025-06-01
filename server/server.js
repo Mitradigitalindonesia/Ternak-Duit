@@ -15,36 +15,14 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
-// Proxy API to avoid CORS issues
-const API_BASE = 'https://windice.io/api/v1';
-app.post('/api/roll', async (req, res) => {
-  try {
-    console.log("Incoming Roll Request:", req.body);
-    console.log("Authorization:", req.headers.authorization);
+// Gunakan 2 base URL berbeda sesuai dokumentasi dan uji coba
+const API_BASE_USER = 'https://windice.io/api/v1/api'; // Untuk GET /user
+const API_BASE_ROLL = 'https://windice.io/api/v1';     // Untuk POST /roll
 
-    const response = await fetch(`${API_BASE}/roll`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': req.headers.authorization,
-      },
-      body: JSON.stringify(req.body),
-    });
-
-    const text = await response.text(); // untuk debugging response mentah
-    console.log("Windice Response:", text);
-
-    const data = JSON.parse(text);
-    res.json(data);
-  } catch (err) {
-    console.error("Roll Error:", err);
-    res.status(500).json({ status: 'error', message: err.message });
-  }
-});
-
+// Proxy GET /user (balance info)
 app.get('/api/user', async (req, res) => {
   try {
-    const response = await fetch(`${API_BASE}/user`, {
+    const response = await fetch(`${API_BASE_USER}/user`, {
       headers: {
         'Authorization': req.headers.authorization,
       }
@@ -56,5 +34,24 @@ app.get('/api/user', async (req, res) => {
   }
 });
 
+// Proxy POST /roll (betting)
+app.post('/api/roll', async (req, res) => {
+  try {
+    const response = await fetch(`${API_BASE_ROLL}/roll`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': req.headers.authorization,
+      },
+      body: JSON.stringify(req.body),
+    });
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+// Jalankan server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
