@@ -93,30 +93,38 @@
     let sniperUsed = false;
 
     async function fetchBalance(apiKey, coin) {
-      const res = await fetch('/api/user', {
-        headers: { 'Authorization': apiKey }
-      });
-      const json = await res.json();
-      return json.data.balance[coin];
-    }
+  const res = await fetch('/api/user', {
+    headers: { 'Authorization': apiKey }
+  });
+  const json = await res.json();
+  console.log("Balance result:", json);
+  if (json && json.status === 'success' && json.data && json.data.balance && json.data.balance[coin] !== undefined) {
+    return json.data.balance[coin];
+  } else {
+    logEl.textContent = `Error fetching balance: ${json.message || 'Unknown'}`;
+    return 0;
+  }
+}
 
-    async function roll(apiKey, coin, bet, low = 100, high = 7000) {
-      const res = await fetch('/api/roll', {
-        method: 'POST',
-        headers: {
-          'Authorization': apiKey,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          curr: coin,
-          bet: parseFloat(bet),
-          game: "in",
-          low: low,
-          high: high
-        })
-      });
-      return await res.json();
-    }
+async function roll(apiKey, coin, bet, low = 100, high = 7000) {
+  const res = await fetch('/api/roll', {
+    method: 'POST',
+    headers: {
+      'Authorization': apiKey,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      curr: coin,
+      bet: parseFloat(bet),
+      game: "in",
+      low: low,
+      high: high
+    })
+  });
+  const json = await res.json();
+  console.log("Roll result:", json);
+  return json;
+}
 
     function delay(ms) {
       return new Promise(resolve => setTimeout(resolve, ms));
