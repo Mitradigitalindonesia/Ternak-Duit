@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Windice Bot - Climber & Sniper</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: #f9f9f9;
+      color: #333;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .bot-container {
+      background: white;
+      padding: 2rem;
+      border-radius: 12px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+      max-width: 400px;
+      width: 100%;
+    }
+    h2 {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    label, select, input {
+      display: block;
+      width: 100%;
+      margin-bottom: 1rem;
+    }
+    button {
+      width: 100%;
+      padding: 0.75rem;
+      background-color: #007bff;
+      color: white;
+      font-size: 1rem;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:disabled {
+      background-color: #999;
+    }
+    .status {
+      margin-top: 1rem;
+      font-size: 0.9rem;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <div class="bot-container">
+    <h2>Windice Auto Bot</h2>
+
+    <label for="apiKey">API Key</label>
+    <input type="text" id="apiKey" placeholder="Enter your Windice API Key" />
+
+    <label for="coin">Select Coin</label>
+    <select id="coin">
+      <option value="trx">TRX</option>
+      <option value="win">WIN</option>
+    </select>
+
+    <label for="baseBet">Base Bet</label>
+    <input type="number" id="baseBet" value="0.000001" step="0.0000001" />
+
+    <button id="startBtn">Start Bot</button>
+
+    <div class="status">
+      <p>Balance: <span id="balance">-</span></p>
+      <p>Profit: <span id="profit">0</span></p>
+      <p>Status: <span id="log">Idle</span></p>
+    </div>
+  </div>
+
+  <script>
+    const startBtn = document.getElementById('startBtn');
+    const apiKeyInput = document.getElementById('apiKey');
+    const coinSelect = document.getElementById('coin');
+    const baseBetInput = document.getElementById('baseBet');
+    const balanceEl = document.getElementById('balance');
+    const logEl = document.getElementById('log');
+    const profitEl = document.getElementById('profit');
+
+    let running = false;
+    let peakProfit = 0;
+    let currentProfit = 0;
+    let phase = 1;
+    let sniperUsed = false;
+
+    async function fetchBalance(apiKey, coin) {
+      const res = await fetch('/api/user', {
+        headers: { 'Authorization': apiKey }
+      });
+      const json = await res.json();
+      return json.data.balance[coin];
+    }
+
+    async function roll(apiKey, coin, bet, low = 100, high = 7000) {
+      const res = await fetch('/api/roll', {
+        method: 'POST',
+        headers: {
+          'Authorization': apiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          curr: coin,
+          bet: parseFloat(bet),
+          game: "in",
+          low: low,
+          high: high
+        })
+      });
+      return await res.json();
+    }
+
+    function delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function startBot() {
+      const apiKey = apiKeyInput.value.trim();
+      const coin = coinSelect.value;
+      const baseBet = parseFloat(baseBetInput.value);
+      if (!apiKey || !baseBet) return;
+
+      running = true;
+      startBtn.disabled = true;
+      logEl.textContent = 'Running...';
+
+      let currentBet = baseBet;
+      let totalLoss = 0;
+      let sniperMode = false;
+
+      while (running) {
+        const balance = await fetchBalance(apiKey, coin);
+        balanceEl.textContent = balance.toFixed(8);
+
+        const result = await roll(apiKey, coin, currentBet);
+        const win = result.data.win;
+        const profit = win - currentBet;
+        currentProfit += profit;
+        profitEl.textContent = currentProfit.toFixed(8);
+
+        if (profit > 0) {
+          totalLoss = 0;
+          currentBet = baseBet;
+          sniperMode = false;
+        } else {
+          totalLoss += currentBet;
+
+          if (!sniperUsed && totalLoss >= baseBet * 5) {
+            logEl.textContent = "Sniper mode ON";
+            currentBet = baseBet * 6;
+            sniperUsed = true;
+            sniperMode = true;
+          } else {
+            currentBet *= 1.75;
+          }
+        }
+
+        if (currentProfit > peakProfit) {
+          peakProfit = currentProfit;
+          phase = 1;
+          sniperUsed = false;
+        }
+
+        if (sniperMode) {
+          sniperMode = false;
+          sniperUsed = true;
+        }
+
+        await delay(1200);
+      }
+    }
+
+    startBtn.addEventListener('click', () => {
+      if (!running) startBot();
+    });
+  </script>
+</body>
+</html>
