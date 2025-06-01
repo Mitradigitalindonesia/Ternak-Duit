@@ -1,20 +1,23 @@
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
+const path = require('path');
 
 const app = express();
+const PORT = 3000;
+const WINDICE_API = 'https://windice.io/api/v1/api';
+
+// Middleware
 app.use(cors());
 app.use(express.json());
 
-const WINDICE_API = 'https://windice.io/api/v1/api';
-
-// Middleware logging simple
+// Logging sederhana
 app.use((req, res, next) => {
   console.log(`[${req.method}] ${req.url}`);
   next();
 });
 
-// Endpoint get user balance
+// Proxy: Get user balance
 app.get('/api/user', async (req, res) => {
   try {
     const response = await fetch(`${WINDICE_API}/user`, {
@@ -30,7 +33,7 @@ app.get('/api/user', async (req, res) => {
   }
 });
 
-// Endpoint roll (bet)
+// Proxy: Roll (bet)
 app.post('/api/roll', async (req, res) => {
   try {
     const response = await fetch(`${WINDICE_API}/roll`, {
@@ -49,7 +52,15 @@ app.post('/api/roll', async (req, res) => {
   }
 });
 
-const PORT = 3000;
+// Serve frontend dari folder public/
+app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// Handle root / fallback
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+});
+
+// Start server
 app.listen(PORT, () => {
-  console.log(`Proxy server running on http://localhost:${PORT}`);
+  console.log(`✅ Proxy server running at http://localhost:${PORT}`);
 });
