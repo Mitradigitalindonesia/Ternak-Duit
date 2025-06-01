@@ -10,19 +10,17 @@ app.use(express.json());
 // Serve static files from public/
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// Route to serve index.html
+// Serve index.html
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
-// Gunakan 2 base URL berbeda sesuai dokumentasi dan uji coba
-const API_BASE_USER = 'https://windice.io/api/v1/api'; // Untuk GET /user
-const API_BASE_ROLL = 'https://windice.io/api/v1';     // Untuk POST /roll
+const API_BASE = 'https://windice.io/api/v1/api';
 
 // Proxy GET /user (balance info)
 app.get('/api/user', async (req, res) => {
   try {
-    const response = await fetch(`${API_BASE_USER}/user`, {
+    const response = await fetch(`${API_BASE}/user`, {
       headers: {
         'Authorization': req.headers.authorization,
       }
@@ -37,7 +35,7 @@ app.get('/api/user', async (req, res) => {
 // Proxy POST /roll (betting)
 app.post('/api/roll', async (req, res) => {
   try {
-    const response = await fetch(`${API_BASE_ROLL}/roll`, {
+    const response = await fetch(`${API_BASE}/roll`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -52,6 +50,5 @@ app.post('/api/roll', async (req, res) => {
   }
 });
 
-// Jalankan server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
