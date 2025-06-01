@@ -16,10 +16,12 @@ app.get('/', (req, res) => {
 });
 
 // Proxy API to avoid CORS issues
-const API_BASE = 'https://windice.io/api/v1/api';
-
+const API_BASE = 'https://windice.io/api/v1';
 app.post('/api/roll', async (req, res) => {
   try {
+    console.log("Incoming Roll Request:", req.body);
+    console.log("Authorization:", req.headers.authorization);
+
     const response = await fetch(`${API_BASE}/roll`, {
       method: 'POST',
       headers: {
@@ -28,9 +30,14 @@ app.post('/api/roll', async (req, res) => {
       },
       body: JSON.stringify(req.body),
     });
-    const data = await response.json();
+
+    const text = await response.text(); // untuk debugging response mentah
+    console.log("Windice Response:", text);
+
+    const data = JSON.parse(text);
     res.json(data);
   } catch (err) {
+    console.error("Roll Error:", err);
     res.status(500).json({ status: 'error', message: err.message });
   }
 });
